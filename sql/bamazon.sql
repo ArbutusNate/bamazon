@@ -48,6 +48,8 @@ VALUES
 SELECT * FROM products;
 SELECT * FROM departments;
 
-UPDATE products SET stock_quantity = 2 WHERE id = 1;
-
-UPDATE products SET stock_quantity = 10 WHERE id = 1;
+SELECT departments.department_id AS ID, departments.department_name AS Department, departments.over_head_costs AS Overhead,
+	sum(products.sales - departments.over_head_costs) AS total_profit
+	FROM departments
+    JOIN products ON departments.department_name = products.department_name
+    GROUP BY departments.department_name;

@@ -2,6 +2,7 @@ var inquire = require('inquirer');
 var mysql = require('mysql');
 var table = require('table');
 
+// Connection to Local Host
 var connection = mysql.createConnection({
   host:'localhost',
   port: 3306,
@@ -10,74 +11,118 @@ var connection = mysql.createConnection({
   database: 'bamazon'
 });
 
-
-
 // Inquire Tree
 function InquireTree(){
   inquire.prompt([{
     type: 'list',
     name: 'userAdmin',
     message: 'Are you a user or an admin?',
-    choices:['1) User', '2) Admin']
+    choices:['1) User', '2) Admin', '3) Supervisor']
     }]).then(function(response){
-      if (response.userAdmin === '2) Admin'){
-        AdminActions();
-      }
-      if (response.userAdmin === '1) User'){
-        Lookup();
+      switch(response.userAdmin) {
+        case '1) User':
+          Lookup();
+          break;
+        case '2) Admin':
+          AdminActions();
+          break;
+        case '3) Supervisor':
+          SupervisorActions();
+          break
       }
     });
 }
 // Functions
-
+function SupervisorActions() {
+  inquire.prompt([{
+    type:"list",
+    name:"superChoice",
+    message:"What would you like to do?",
+    choices: ['View product sales by department',
+    'Create new department']
+  }]).then(function(response){
+    switch(response.superChoice) {
+      case 'View product sales by department':
+        connection.query('SELECT departments.department_id AS ID, departments.department_name AS Department, departments.over_head_costs AS Overhead, products.sales AS product_sales, sum(products.sales - departments.over_head_costs) AS total_profit FROM departments JOIN products ON departments.department_name = products.department_name GROUP BY departments.department_name',
+                          function(err,res){
+                            if(!err){
+                              console.log(res);
+                            } else {
+                              throw err;
+                            }
+                          })
+        break;
+      case 'Create new department':
+        inquire.prompt([
+          {name: 'newDept',
+          message: 'Name of new department:'},
+          {name: 'newOverhead',
+          message: 'How much overhead?'}
+        ]).then(function(response){
+          connection.query('INSERT INTO departments SET ?',
+            [{department_name: response.newDept,
+            over_head_costs: parseInt(response.newOverhead)}],
+            function(err,res){
+              if(!err){
+                console.log("New department, " + response.newDept + ", created with estimated overhead of $" + response.newOverhead);
+              } else {
+                throw err;
+              }
+            })
+        })
+        break;
+    }
+  })
+}
 
 function AdminActions(){
   inquire.prompt([{
-            type: 'list',
-            name: 'adminChoice',
-            message: 'What would you like to do?',
-            choices: ['View products for sale',
-            'View low inventory',
-            'Add to inventory',
-            'Add new product']
-    }]).then(function(response){
-        if (response.adminChoice === 'View products for sale'){
-          connection.query('SELECT * FROM products', function(err,res){
-            MapRes(res);
-            InquireTree();
-          });
-        }
-        if (response.adminChoice === 'View low inventory'){
-          connection.query('SELECT * FROM products WHERE stock_quantity < 5', function(err,res){
-            MapRes(res);
-            InquireTree();
-          });
-        }
-        if (response.adminChoice === 'Add to inventory'){
-          inquire.prompt([
-            {name: 'idToUpdate',
-            message: 'ID of product you would like to update:'},
-            {name: 'quantToUpdate',
-            message: 'How many would you like to add to stock?'}
-            ]).then(function(response){
-              connection.query('UPDATE products SET ? + stock_quantity WHERE ?',
-               [{
-                  stock_quantity : response.quantToUpdate
-               },
-               {
-                 id : response.idToUpdate
-               }],
-               function(err,res){
-                if(!err){
-                  GetAdminList();
-                  InquireTree();
-                } else {
-                  throw err;
-                }
-              });
+    type: 'list',
+    name: 'adminChoice',
+    message: 'What would you like to do?',
+    choices: ['View products for sale',
+    'View low inventory',
+    'Add to inventory',
+    'Add new product']
+  }]).then(function(response){
+    switch(response.adminChoice) {
+      case 'View products for sale':
+        connection.query('SELECT * FROM products', function(err,res){
+          MapRes(res);
+          InquireTree();
+         });
+        break;
+      case 'View low inventory':
+        connection.query('SELECT * FROM products WHERE stock_quantity < 5', function(err,res){
+          MapRes(res);
+          InquireTree();
+        });
+        break;
+      case 'Add to inventory':
+        inquire.prompt([
+          {name: 'idToUpdate',
+          message: 'ID of product you would like to update:'},
+          {name: 'quantToUpdate',
+          message: 'How many would you like to add to stock?'}
+          ]).then(function(response){
+            connection.query('UPDATE products SET ? + stock_quantity WHERE ?',
+             [{
+                stock_quantity : response.quantToUpdate
+             },
+             {
+               id : response.idToUpdate
+             }],
+             function(err,res){
+              if(!err){
+                GetAdminList();
+                InquireTree();
+              } else {
+                throw err;
+              }
             });
-        }
-        if(response.adminChoice === 'Add new product'){
+          });
+        break;
+      case 'Add new product':
           inquire.prompt([
             {name: 'newProd',
             message: 'Name of new product'},
@@ -104,8 +149,9 @@ function AdminActions(){
                 }
               )
             })
-          }
-      });
+        break;
+    }
+  });
 }
 
 function GetAdminList(){
@@ -139,16 +185,33 @@ function Lookup(){
         {name: 'userQuant',
         message: 'How many do you want?'}
       ]).then(function(response){
-          connection.query('SELECT * FROM products WHERE id =' + response.userChoice + '', function(err, res){
-            if(res[0].stock_quantity - response.userQuant < 0 && response.userQuant != NaN){
+          connection.query('SELECT * FROM products WHERE ?',
+          [{ id : response.userChoice }],
+          function(err, res){
+            var currentStock = res[0].stock_quantity;
+            var currentSales = res[0].sales;
+            var sold = response.userQuant;
+            var totalCost = res[0].price * sold;
+            var priceToUser = res[0].price;
+            if(currentStock - sold < 0 && sold != NaN){
               console.log('Insufficient Stock!');
               InquireTree();
             } else {
               console.log('Processing sale...');
-              connection.query('UPDATE products SET stock_quantity = stock_quantity - ' + response.userQuant + ' WHERE id =' + response.userChoice + '');
-              console.log('Price per unit: ' + res[0].price + '. Cost for order: ' + res[0].price * response.userQuant);
-              console.log('Sale Successful!');
-              InquireTree();
+              connection.query('UPDATE products SET ? WHERE ?',
+                [{  stock_quantity : currentStock - sold,
+                    sales : currentSales + totalCost },
+                {   id : response.userChoice }],
+              function(err,res){
+                if(!err){
+                  console.log('Price per unit: ' + priceToUser + '. Cost for order: ' + totalCost);
+                  console.log('Sale Successful!');
+                  InquireTree();
+                } else {
+                  throw err;
+                }
+              });
+
             }
           });
       });
