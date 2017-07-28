@@ -2,6 +2,9 @@ var inquire = require('inquirer');
 var mysql = require('mysql');
 var table = require('table');
 
+var data;
+var output;
+
 // Connection to Local Host
 var connection = mysql.createConnection({
   host:'localhost',
@@ -43,14 +46,17 @@ function SupervisorActions() {
   }]).then(function(response){
     switch(response.superChoice) {
       case 'View product sales by department':
-        connection.query('SELECT departments.department_id AS ID, departments.department_name AS Department, departments.over_head_costs AS Overhead, products.sales AS product_sales, sum(products.sales - departments.over_head_costs) AS total_profit FROM departments JOIN products ON departments.department_name = products.department_name GROUP BY departments.department_name',
-                          function(err,res){
-                            if(!err){
-                              console.log(res);
-                            } else {
-                              throw err;
-                            }
-                          })
+        connection.query('SELECT departments.department_id AS ID, departments.department_name AS Department, departments.over_head_costs AS Overhead, products.sales AS product_sales, sum(products.sales - departments.over_head_costs) AS total_profit FROM departments JOIN products ON departments.department_name = products.department_name GROUP BY departments.department_name ORDER BY ID',
+          function(err,res){
+            if(!err){
+              var superList = res.map(function(y){
+                return console.log('ID: ' + y.ID + " | Department: " + y.Department + " | Overhead: " + y.Overhead + " | Total Sales: " + y.product_sales + " | Total Profit: " + y.total_profit);
+              })
+              InquireTree()
+            } else {
+              throw err;
+            }
+          })
         break;
       case 'Create new department':
         inquire.prompt([
@@ -65,6 +71,7 @@ function SupervisorActions() {
             function(err,res){
               if(!err){
                 console.log("New department, " + response.newDept + ", created with estimated overhead of $" + response.newOverhead);
+                InquireTree()
               } else {
                 throw err;
               }
@@ -114,6 +121,7 @@ function AdminActions(){
              }],
              function(err,res){
               if(!err){
+                console.log("success!")
                 GetAdminList();
                 InquireTree();
               } else {
@@ -167,6 +175,12 @@ function GetAdminList(){
 function MapRes(res){
   var adminList = res.map(function(y){
     return console.log('ID: ' + y.id + ' | ' + y.product_name + ' | ' + y.department_name + ' | $' + y.price + ' | ' + y.stock_quantity);
+    // data = [
+    //   ['ID', 'Product Name', 'Department Name', 'Price, Stock Quantity'],
+    //   [y.id, y.product_name, y.department_name, y.price, y.stock_quantity]
+    // ];
+    // output = table(data);
+    // console.log(output);
   })
 }
 
